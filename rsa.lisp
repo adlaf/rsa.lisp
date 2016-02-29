@@ -1,0 +1,133 @@
+(setf *random-state* (make-random-state t))
+(defparameter *least-sec-digit* 200)
+(defparameter *test-times* 200)
+(defparameter *p* nil)
+(defparameter *q* nil)
+(defparameter *e* 65537)
+(defparameter *d* nil)
+(defparameter *xgcd* nil)
+(defparameter *phin* nil)
+(defparameter *k* nil)
+(defparameter *encrypted* nil)
+(defparameter *decrypted* nil)
+
+(defun convert (char)
+  (mapcar #'char-code (concatenate 'list char)))
+
+(defun rconvert (code)
+  (concatenate 'string (mapcar #'code-char code)))
+
+(defun rsa-enchiper (x e n)
+  (mapcar (lambda (a) (modexp a e n)) x))
+
+(defun rsa-decipher (x d n)
+  (mapcar (lambda (a) (modexp a d n)) x))
+
+(defun genrand (digit)
+  (let* ((min (expt 10 digit))
+		 (max (expt 10 (1+ digit)))
+		 (rand (random max)))
+	(if (and (> (log rand 10) (log min 10)) (< (log rand 10) (log max 10)))
+	  rand
+	  (genrand digit))))
+
+(defun genprime (digit k)
+  (let ((p (genrand digit)))
+	(if (and (miller-rabin p k) (oddp p))
+	  p
+	  (genprime digit k))))
+
+(defun num-to-bit-vector (num)
+  (labels ((bitvec (int &optional accum)
+				   (cond ((> int 0)
+						  (multiple-value-bind (i r) (truncate int 2)
+							(bitvec i (push r accum))))
+						 ((null accum) (push 0 accum))
+						 (t accum))))
+	(coerce (bitvec num) 'bit-vector)))
+
+(defun genkey (digit k)
+  (format t "generating keys with ~a digits of prime numbers.~%" digit)
+  (setf *p* (genprime digit k))
+  (setf *q* (genprime digit k))
+  (setf *n* (* *p* *q*))
+  (setf *phin* (* (1- *p*) (1- *q*)))
+  (setf *e* 65537)
+  (setf *xgcd* (multiple-value-list (xgcd *e* *phin*)))
+  (setf *d* (cadr *xgcd*))
+  (setf *k* (caddr *xgcd*))
+  (if (minusp *d*)
+	(progn (format t "Key generation failed. Tring again...~%") (terpri)
+		   (genkey digit k))
+  (format t "Key generation completed..."))
+  (terpri))
+
+(defun mklist (obj)
+  (if (listp obj) obj (list obj)))
+
+(defun demo ()
+  (labels ((read-digit ()
+					   (princ "Please enter digits for prime generation(200to300): ")
+					   (let ((digit (parse-integer (read-line) 
+												   :junk-allowed t)))
+						 (if (not (and (integerp digit) (>= digit 200) 
+									   (<= digit 300)))
+						   (read-digit)
+						   digit))))
+	  (setf *least-sec-digit* (read-digit))
+  (genkey *least-sec-digit* *test-times*)
+  (format t "Please enter a message to encrypt/decrypt: ")
+  (let* ((s (read-line))
+		 (plain (convert s)))
+	(setf *encrypted* (rsa-enencrypted plain *e* *n*))
+	(fresh-line)
+	(format t "encrypted message is~%")
+	(print *encrypted*)
+	(fresh-line)
+	(setf *decrypted* (rsa-deencrypted *encrypted* *d* *n*))
+	(format t "decrytped message is ~%")
+	(print *decrypted*)
+	(fresh-line)
+	(format t  "converting the decrypted message into text...~%")
+	(print (rconvert *decrypted*))
+	(bye))))
+
+;-----------------------------from rosettacode.org----------------------------
+(defun factor-out (number divisor)
+  (do ((e 0 (1+ e))
+       (r number (/ r divisor)))
+      ((/= (mod r divisor) 0) (values r e))))
+
+(defun mult-mod (x y modulus) (mod (* x y) modulus))
+
+(defun modexp (base exponent modulus)
+  (labels ((expt-mod-iter (b e p)
+             (cond ((= e 0) p)
+                   ((evenp e)
+                    (expt-mod-iter (mult-mod b b modulus)
+                                   (/ e 2)
+                                   p))
+                   (t
+                    (expt-mod-iter b
+                                   (1- e)
+                                   (mult-mod b p modulus))))))
+    (expt-mod-iter base exponent 1)))
+
+(defun randrange (lower upper)
+  (+ lower (random (+ (- upper lower) 1))))
+
+(defun miller-rabin (n k)
+  (cond ((= n 1)   nil)
+        ((< n 4)     t)
+        ((evenp n) nil) (t
+         (multiple-value-bind (d s) (factor-out (- n 1) 2)
+           (labels ((strong-liarp (a)
+                      (let ((x (modexp a d n)))
+                        (or (= x 1)
+                            (loop repeat s
+                                  for y = x then (mult-mod y y n)
+                                  thereis (= y (- n 1)))))))
+             (loop repeat k
+                   always (strong-liarp (randrange 2 (- n 2)))))))))
+;-----------------------------------------------------------------------------
+
