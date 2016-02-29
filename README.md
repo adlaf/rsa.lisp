@@ -1,3 +1,3 @@
 # rsa.lisp
-Author: Hiroyuki Sakat
-Description:testing program for implementing RSA algorithm in lisp
+Author: Hiroyuki Sakato
+Description:testing program for implementing RSA algorithm in Common Lisp
